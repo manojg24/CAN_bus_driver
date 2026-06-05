@@ -90,6 +90,18 @@ void can_init(void) {
 
     // 8. Configure filter — accept all messages
     // your code
+    CAN_FMR |= (1<<0); //enter filter mode
+    CAN_FA1R &= ~(1<<0); //deactivate filter 0
+
+    CAN_FM1R &= ~(1<<0); //mask mode
+    CAN_FS1R |= (1<<0); // 32 bit scale
+
+    CAN_F0R1 = 0x00000000;
+    CAN_F0R2 = 0x00000000;
+
+    //exit
+    CAN_FMR &= ~(1<<0); 
+    CAN_FA1R |= (1<<0); 
 }
 
 void can_tx(uint32_t id, uint8_t* data, uint8_t len) {
