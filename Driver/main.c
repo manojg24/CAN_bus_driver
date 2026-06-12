@@ -64,7 +64,7 @@ void can_init(void) {
 
     // 3. Wait until INAK bit (bit 0) is set in CAN_MSR
     // your code
-    while !(CAN_MSR & (1 << INAK))
+    while (!(CAN_MSR & (1 << INAK)));
 
     // 4. Clear SLEEP bit (bit 1) in CAN_MCR
     // your code
@@ -86,12 +86,12 @@ void can_init(void) {
 
     // 7. Wait until INAK is cleared in CAN_MSR
     // your code
-    while (CAN_MSR & (1 << INAK))
+    while (CAN_MSR & (1 << INAK));
 
     // 8. Configure filter — accept all messages
     // your code
-    CAN_FMR |= (1<<0); //enter filter mode
     CAN_FA1R &= ~(1<<0); //deactivate filter 0
+    CAN_FMR |= (1<<0); //enter filter mode
 
     CAN_FM1R &= ~(1<<0); //mask mode
     CAN_FS1R |= (1<<0); // 32 bit scale
@@ -119,6 +119,7 @@ void can_tx(uint32_t id, uint8_t* data, uint8_t len) {
 
     // 13. Request transmission — set TXRQ bit (bit 0) in CAN_TI0R
     // your code
+    CAN_TI0R |= (1<<0);
 }
 
 uint8_t can_rx(uint32_t* id, uint8_t* data) {
@@ -136,6 +137,7 @@ uint8_t can_rx(uint32_t* id, uint8_t* data) {
 
     // 18. Release FIFO — set RFOM0 bit (bit 5) in CAN_RF0R
     // your code
+    CAN_RF0R |= (1<<5);
 
     return 0;
 }
