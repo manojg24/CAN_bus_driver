@@ -48,9 +48,53 @@ typedef unsigned int           uintptr_t;
 #define CAN_F0R1     (*(volatile uint32_t *)(CAN1_BASE + 0x240))
 #define CAN_F0R2     (*(volatile uint32_t *)(CAN1_BASE + 0x244))
 
+//UART
+#define USART2_BASE  0x40004400UL
+#define USART2_SR    (*(volatile uint32_t *)(USART2_BASE + 0x00))
+#define USART2_DR    (*(volatile uint32_t *)(USART2_BASE + 0x04))
+#define USART2_BRR   (*(volatile uint32_t *)(USART2_BASE + 0x08))
+#define USART2_CR1   (*(volatile uint32_t *)(USART2_BASE + 0x0C))
+
+//GPIO
+#define GPIOA_MODER   (*(volatile uint32_t *)(GPIOA_BASE + 0x00))
+#define GPIOA_AFRL    (*(volatile uint32_t *)(GPIOA_BASE + 0x20))
+
 void delay(volatile uint32_t count) 
 {
     while(count--);
+}
+
+void uart_init(void)
+{
+    RCC_AHB1ENR |= (1<<0);
+    RCC_APB1ENR |= (1<<17);
+
+    USART2_BRR = (45000000/115200);
+
+    GPIOA_AFRL |= (7 << 8);   // PA2 = AF7 (UART2 TX)
+    GPIOA_AFRL |= (7 << 12);  // PA3 = AF7 (UART2 RX)
+
+    GPIOA_MODER &= ~(3 << 4);
+    GPIOA_MODER |=  (2 << 4); 
+    GPIOA_MODER &= ~(3 << 6);  
+    GPIOA_MODER |=  (2 << 6);   
+
+    USART2_CR1 |= ((1<<13)| (1<<3));
+}
+
+void uart_tx_byte(uint16_t byte)
+{
+    while (!(USART2_SR & (1 << 7)));  // wait until TXE is set
+    USART2_DR = byte;
+}
+
+void uart_tx_string(const char* str)
+{
+    while (*str != '\0')
+    {
+        uart_tx_byte(*str);
+        str++;
+    }
 }
 
 void can_init(void) {
