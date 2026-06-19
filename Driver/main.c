@@ -11,6 +11,13 @@ typedef signed long long       int64_t;
 
 typedef unsigned int           uintptr_t;
 
+extern uint32_t _sidata; // Start of .data in FLASH
+extern uint32_t _sdata;  // Start of .data in RAM
+extern uint32_t _edata;  // End of .data in RAM
+extern uint32_t _sbss;   // Start of .bss in RAM
+extern uint32_t _ebss;   // End of .bss in RAM
+extern void _estack(void); // Top of stack from linker script
+
 // Base addresses
 #define RCC_BASE    0x40023800UL
 #define GPIOA_BASE  0x40020000UL
@@ -69,20 +76,23 @@ void uart_init(void)
     RCC_AHB1ENR |= (1<<0);
     RCC_APB1ENR |= (1<<17);
 
-    USART2_BRR = (45000000/115200);
-
-    GPIOA_AFRL |= (7 << 8);   // PA2 = AF7 (UART2 TX)
-    GPIOA_AFRL |= (7 << 12);  // PA3 = AF7 (UART2 RX)
+    volatile uint32_t dummy = RCC_APB1ENR;
+    (void)dummy;
 
     GPIOA_MODER &= ~(3 << 4);
     GPIOA_MODER |=  (2 << 4); 
     GPIOA_MODER &= ~(3 << 6);  
-    GPIOA_MODER |=  (2 << 6);   
+    GPIOA_MODER |=  (2 << 6); 
+
+    GPIOA_AFRL |= (7 << 8);   // PA2 = AF7 (UART2 TX)
+    GPIOA_AFRL |= (7 << 12);  // PA3 = AF7 (UART2 RX)  
+
+    USART2_BRR = 0x8B;
 
     USART2_CR1 |= ((1<<13)| (1<<3));
 }
 
-void uart_tx_byte(uint16_t byte)
+void uart_tx_byte(uint8_t byte)
 {
     while (!(USART2_SR & (1 << 7)));  // wait until TXE is set
     USART2_DR = byte;
@@ -101,6 +111,9 @@ void can_init(void) {
     // 1. Enable CAN1 clock — bit 25 in RCC_APB1ENR
     // your code
     RCC_APB1ENR |= (1<<25);
+
+    volatile uint32_t delay_clk = 100;
+    while(delay_clk--);
 
     // 2. Request init mode — set INRQ bit (bit 0) in CAN_MCR
     // your code
@@ -213,26 +226,58 @@ uint8_t can_rx(uint32_t* id, uint8_t* data) {
 }
 
 void Reset_Handler(void) {
+    // Enable FPU
+    *(volatile uint32_t *)(0xE000ED88UL) |= ((3UL << 20) | (3UL << 22));
+    __asm volatile ("isb");
+
+    // Copy .data to RAM
+    uint32_t *pSource = &_sidata;
+    uint32_t *pDest = &_sdata;
+    while (pDest < &_edata) {
+        *pDest++ = *pSource++;
+    }
+
+    // Zero out .bss
+    pDest = &_sbss;
+    while (pDest < &_ebss) {
+        *pDest++ = 0;
+    }
+
+    // Initialize UART first
+    uart_init();
+    
+    // Test point 1: Print immediately to verify clock-to-UART path
+    uart_tx_string("--- System Boot Complete ---\r\n");
+
+    // Initialize CAN
     can_init();
+    
+    // Test point 2: Verify code successfully exited the can_init loops
+    uart_tx_string("CAN Peripheral Initialized Safely\r\n");
 
     uint8_t tx_data[8] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
     uint32_t rx_id;
     uint8_t rx_data[8];
 
     while (1) {
-        // send a CAN frame with ID 0x123
+        // Continuous loop heartbeat
+        uart_tx_string("Transmitting CAN Frame...\r\n");
+        
         can_tx(0x123, tx_data, 8);
-
         delay(100000);
 
-        // receive it back in loopback mode
-        can_rx(&rx_id, rx_data);
+        uint8_t len = can_rx(&rx_id, rx_data);
+        if(len > 0) {
+            uart_tx_string("Success: CAN Loopback RX OK!\r\n");
+        } else {
+            uart_tx_string("Error: CAN RX Empty/Filtered\r\n");
+        }
 
-        delay(1000000);
+        delay(2000000);
     }
 }
 
 void (*const vector_table[])(void) __attribute__((section(".isr_vector"))) = {
-    (void (*)(void))0x20020000,
+    (void (*)(void))&_estack, 
     Reset_Handler,
 };
